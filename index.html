@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Contract Manager - LIVE</title>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { 500: '#10b981', 600: '#059669' }, 
+                        dark: { 900: '#000000', 800: '#0a0a0a', 700: '#171717', 600: '#262626' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #050505; color: #f3f4f6; margin: 0; padding: 0; }
+        .glass-card { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glass-header { background: rgba(5, 5, 5, 0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .price-up { color: #22c55e; }
+        .price-down { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- ICONS ---
+        const IconActivity = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+        const IconSearch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
+        const IconSettings = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+        const IconX = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
+        const IconShield = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>;
+        const IconAlert = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
+        const IconGrid = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>;
+        const IconList = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>;
+
+        const parseMarketFeed = (channelId, feedString) => {
+            const parts = feedString.split('|');
+            return {
+                channelId,
+                lastPrice: parts[0] || '0.00',
+                change: parts[1] || '0.00',
+                changePercent: parts[2] || '0.00%',
+                open: parts[3] || '0.00',
+                high: parts[4] || '0.00',
+                low: parts[5] || '0.00',
+                prevClose: parts[6] || '0.00',
+                bid: parts[7] || '0.00',
+                ask: parts[8] || '0.00',
+                bidQty: parts[9] || '0',
+                askQty: parts[10] || '0',
+                timestamp: parts[21] || new Date().toISOString(),
+            };
+        };
+
+        const INITIAL_MAPPINGS = {
+            "spot_XAUUSD": { name: "COMEX Gold", type: "Spot", commodity: "Gold", expiry: null, status: "Active" },
+            "spot_XAGUSD": { name: "COMEX Silver", type: "Spot", commodity: "Silver", expiry: null, status: "Active" },
+            "spot_USDINR": { name: "USD INR", type: "Spot", commodity: "USDINR", expiry: null, status: "Active" },
+            "mcx_483079": { name: "MCX Gold", type: "Future", commodity: "Gold", expiry: "05Aug", status: "Active" },
+            "mcx_471725": { name: "MCX Silver", type: "Future", commodity: "Silver", expiry: "04Sep", status: "Active" },
+            "mcx_466583": { name: "MCX Crude Oil", type: "Future", commodity: "Crude Oil", expiry: "20Jul", status: "Active" },
+            "mcx_copper": { name: "MCX Copper", type: "Future", commodity: "Copper", expiry: "31Jul", status: "Active" },
+            "mcx_alum": { name: "MCX Aluminium", type: "Future", commodity: "Aluminium", expiry: "31Jul", status: "Active" },
+            "mcx_zinc": { name: "MCX Zinc", type: "Future", commodity: "Zinc", expiry: "31Jul", status: "Active" },
+            "mcx_goldmini": { name: "Gold Mini", type: "Future", commodity: "Gold Mini", expiry: "05Aug", status: "Active" },
+            "mcx_silvmini": { name: "Silver Mini", type: "Future", commodity: "Silver Mini", expiry: "31Aug", status: "Active" },
+        };
+
+        const DashboardCard = ({ data, mapping, onClick, viewMode }) => {
+            const isUnmapped = !mapping;
+            const priceVal = parseFloat(data.change);
+            const isUp = priceVal >= 0;
+            
+            if (viewMode === 'compact') {
+                return (
+                    <div 
+                        onClick={() => onClick(data, mapping)}
+                        className={`glass-card rounded-xl p-2 sm:p-4 cursor-pointer hover:border-gray-400 transition-all text-center flex flex-col justify-center items-center h-full ${isUnmapped ? 'border-orange-500/30' : ''}`}
+                    >
+                        <div className={`text-[11px] sm:text-base font-medium ${isUnmapped ? 'text-orange-400' : 'text-gray-200'}`}>
+                            {isUnmapped ? 'NEW' : mapping.commodity}
+                        </div>
+                        
+                        {mapping && mapping.expiry && (
+                            <div className="text-[9px] sm:text-xs text-gray-500 mb-1">{mapping.expiry}</div>
+                        )}
+                        {!mapping && (
+                            <div className="text-[8px] sm:text-[10px] text-gray-500 mb-1 truncate w-full px-1">{data.channelId}</div>
+                        )}
+
+                        <div className={`text-base sm:text-2xl font-bold tracking-tight mt-1 text-white`}>
+                            {data.lastPrice}
+                        </div>
+                        <div className={`text-[10px] sm:text-sm font-medium mt-1 flex flex-col sm:flex-row gap-0 sm:gap-1 ${isUp ? 'price-up' : 'price-down'}`}>
+                            <span>{isUp ? '+' : ''}{data.change}</span>
+                            <span>({data.changePercent})</span>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div 
+                    onClick={() => onClick(data, mapping)}
+                    className={`glass-card rounded-xl p-3 sm:p-4 cursor-pointer hover:border-gray-500 transition-all ${isUnmapped ? 'border-orange-500/50 hover:border-orange-400' : ''}`}
+                >
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="overflow-hidden">
+                            <h3 className={`text-sm sm:text-lg font-bold truncate ${isUnmapped ? 'text-orange-400' : 'text-white'}`}>
+                                {isUnmapped ? 'NEW CHANNEL' : mapping.name}
+                            </h3>
+                            <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 font-mono flex items-center gap-2 truncate">
+                                {isUnmapped && <span className="flex items-center gap-1 text-orange-400 bg-orange-400/10 px-1 py-0.5 rounded"><IconAlert /></span>}
+                                {mapping && mapping.expiry && <span className="text-gray-300">{mapping.expiry} • </span>}
+                                <span className="truncate">{data.channelId}</span>
+                            </div>
+                        </div>
+                        {mapping && (
+                            <span className="hidden sm:inline-block text-[10px] uppercase px-2 py-1 rounded bg-white/5 text-gray-400 border border-white/10 ml-2">
+                                {mapping.type}
+                            </span>
+                        )}
+                    </div>
+                    
+                    <div className="mb-3 sm:mb-4">
+                        <div className={`text-lg sm:text-2xl font-bold tracking-tight ${isUp ? 'price-up' : 'price-down'}`}>
+                            {data.lastPrice}
+                        </div>
+                        <div className={`text-[10px] sm:text-sm font-medium mt-0.5 sm:mt-1 flex items-center gap-1 sm:gap-2 ${isUp ? 'price-up' : 'price-down'}`}>
+                            <span>{isUp ? '+' : ''}{data.change}</span>
+                            <span>({data.changePercent})</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4 pt-2 sm:pt-3 border-t border-white/10 text-[10px] sm:text-sm">
+                        <div>
+                            <div className="text-gray-500 text-[9px] sm:text-xs mb-1">Bid ({data.bidQty})</div>
+                            <div className="font-semibold text-white bg-white/5 px-1 sm:px-2 py-1 rounded text-center">{data.bid}</div>
+                        </div>
+                        <div>
+                            <div className="text-gray-500 text-[9px] sm:text-xs mb-1">Ask ({data.askQty})</div>
+                            <div className="font-semibold text-white bg-white/5 px-1 sm:px-2 py-1 rounded text-center">{data.ask}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const DetailDrawer = ({ data, mapping, onClose }) => {
+            if (!data) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex justify-end">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
+                    <div className="relative w-full max-w-md bg-dark-800 h-full border-l border-white/10 shadow-2xl flex flex-col fade-in">
+                        <div className="flex justify-between items-center p-6 border-b border-white/10">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">{mapping ? mapping.name : 'Unmapped Channel'}</h2>
+                                <p className="text-gray-400 text-sm font-mono mt-1">{data.channelId}</p>
+                            </div>
+                            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
+                                <IconX />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            <div className="glass-card p-6 rounded-xl text-center">
+                                <div className="text-gray-400 text-sm mb-2">Last Traded Price</div>
+                                <div className="text-4xl font-bold text-white mb-2">{data.lastPrice}</div>
+                                <div className={`text-lg font-medium ${parseFloat(data.change) >= 0 ? 'price-up' : 'price-down'}`}>
+                                    {parseFloat(data.change) >= 0 ? '+' : ''}{data.change} ({data.changePercent})
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="glass-card p-4 rounded-xl">
+                                    <div className="text-xs text-gray-500 mb-1">Open</div>
+                                    <div className="text-lg font-medium text-white">{data.open}</div>
+                                </div>
+                                <div className="glass-card p-4 rounded-xl">
+                                    <div className="text-xs text-gray-500 mb-1">Previous Close</div>
+                                    <div className="text-lg font-medium text-white">{data.prevClose}</div>
+                                </div>
+                                <div className="glass-card p-4 rounded-xl">
+                                    <div className="text-xs text-gray-500 mb-1">High</div>
+                                    <div className="text-lg font-medium text-green-400">{data.high}</div>
+                                </div>
+                                <div className="glass-card p-4 rounded-xl">
+                                    <div className="text-xs text-gray-500 mb-1">Low</div>
+                                    <div className="text-lg font-medium text-red-400">{data.low}</div>
+                                </div>
+                            </div>
+                            
+                            <div className="glass-card rounded-xl overflow-hidden">
+                                <div className="bg-white/5 px-4 py-2 border-b border-white/10 text-sm font-semibold text-white">Market Depth</div>
+                                <div className="flex justify-between p-4">
+                                    <div className="w-1/2 pr-2 border-r border-white/10 text-center">
+                                        <div className="text-blue-400 font-bold text-lg">{data.bid}</div>
+                                        <div className="text-gray-500 text-xs mt-1">Qty: {data.bidQty}</div>
+                                    </div>
+                                    <div className="w-1/2 pl-2 text-center">
+                                        <div className="text-red-400 font-bold text-lg">{data.ask}</div>
+                                        <div className="text-gray-500 text-xs mt-1">Qty: {data.askQty}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const OwnerPanel = ({ mappings, onBack }) => {
+            return (
+                <div className="fade-in max-w-6xl mx-auto text-white">
+                    <div className="flex justify-between items-center mb-8">
+                        <div>
+                            <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+                                <IconShield /> Owner Control Panel
+                            </h2>
+                            <p className="text-gray-400 text-xs sm:text-sm mt-1">Manage channel mappings, commodities, and replacements.</p>
+                        </div>
+                        <button onClick={onBack} className="bg-white/10 hover:bg-white/20 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all">
+                            Back
+                        </button>
+                    </div>
+
+                    <div className="glass-card rounded-xl overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-white/5 border-b border-white/10 text-gray-400">
+                                    <tr>
+                                        <th className="px-4 sm:px-6 py-4 font-medium">Channel ID</th>
+                                        <th className="px-4 sm:px-6 py-4 font-medium">Mapped Name</th>
+                                        <th className="px-4 sm:px-6 py-4 font-medium">Expiry</th>
+                                        <th className="px-4 sm:px-6 py-4 font-medium">Commodity</th>
+                                        <th className="px-4 sm:px-6 py-4 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {Object.entries(mappings).map(([id, map]) => (
+                                        <tr key={id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-4 sm:px-6 py-4 font-mono text-gray-300">{id}</td>
+                                            <td className="px-4 sm:px-6 py-4 font-medium text-white">{map.name}</td>
+                                            <td className="px-4 sm:px-6 py-4 text-gray-400">{map.expiry || '-'}</td>
+                                            <td className="px-4 sm:px-6 py-4 text-gray-300">{map.commodity}</td>
+                                            <td className="px-4 sm:px-6 py-4">
+                                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded text-xs">
+                                                    {map.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('dashboard');
+            const [viewMode, setViewMode] = useState('compact');
+            const [marketData, setMarketData] = useState([]);
+            const [mappings, setMappings] = useState(INITIAL_MAPPINGS);
+            const [search, setSearch] = useState('');
+            const [filter, setFilter] = useState('All');
+            const [selectedData, setSelectedData] = useState(null);
+            const [apiStatus, setApiStatus] = useState('connecting');
+
+            useEffect(() => {
+                let isMounted = true;
+                
+                const fetchAndParse = async () => {
+                    try {
+                        const response = await fetch('/api/feed');
+                        
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        
+                        const rawData = await response.json();
+                        
+                        if (isMounted) {
+                            const parsed = Object.entries(rawData).map(([id, feed]) => parseMarketFeed(id, feed));
+                            setMarketData(parsed);
+                            setApiStatus('live');
+                        }
+                    } catch (error) {
+                        console.error("API Fetch Error:", error);
+                        if (isMounted) setApiStatus('error');
+                    }
+                };
+                
+                fetchAndParse(); 
+                const interval = setInterval(fetchAndParse, 2000); 
+                
+                return () => {
+                    isMounted = false;
+                    clearInterval(interval);
+                };
+            }, []);
+
+            const filteredData = useMemo(() => {
+                return marketData.filter(item => {
+                    const map = mappings[item.channelId];
+                    const searchStr = search.toLowerCase();
+                    const matchesSearch = item.channelId.toLowerCase().includes(searchStr) || 
+                                          (map && map.name.toLowerCase().includes(searchStr)) ||
+                                          (map && map.commodity.toLowerCase().includes(searchStr));
+                    
+                    if (filter === 'All') return matchesSearch;
+                    if (filter === 'Unmapped') return !map && matchesSearch;
+                    if (map && map.type === filter) return matchesSearch;
+                    return false;
+                });
+            }, [marketData, mappings, search, filter]);
+
+            const PINNED_IDS = ["spot_XAUUSD", "spot_XAGUSD", "spot_USDINR"];
+            
+            const pinnedData = filteredData.filter(d => PINNED_IDS.includes(d.channelId));
+            pinnedData.sort((a, b) => PINNED_IDS.indexOf(a.channelId) - PINNED_IDS.indexOf(b.channelId));
+            const regularData = filteredData.filter(d => !PINNED_IDS.includes(d.channelId));
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    <nav className="glass-header sticky top-0 z-40 px-4 sm:px-6 py-4 flex justify-between items-center">
+                        <div className="flex items-center gap-2 sm:gap-3 text-white">
+                            <div className={`p-1.5 sm:p-2 rounded-lg transition-colors ${apiStatus === 'live' ? 'bg-emerald-500/20 text-emerald-400' : apiStatus === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                <IconActivity />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="font-bold text-sm sm:text-lg tracking-wide truncate max-w-[120px] sm:max-w-none">Market Manager</span>
+                                <span className="text-[9px] sm:text-[10px] uppercase font-semibold flex items-center gap-1">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${apiStatus === 'live' ? 'bg-emerald-500' : apiStatus === 'error' ? 'bg-red-500' : 'bg-blue-500 animate-pulse'}`}></span>
+                                    {apiStatus === 'live' ? 'LIVE FEED CONNECTED' : apiStatus === 'error' ? 'CONNECTION ERROR' : 'CONNECTING...'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-3 sm:gap-4">
+                            {view === 'dashboard' && (
+                                <button 
+                                    onClick={() => setView('owner')} 
+                                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border border-emerald-400/30 rounded-lg text-xs sm:text-sm font-semibold text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all duration-300"
+                                >
+                                    <IconSettings /> <span className="hidden sm:inline">Owner Panel</span><span className="sm:hidden">Owner</span>
+                                </button>
+                            )}
+                            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-brand-500 to-blue-500 border border-dark-800 ring-2 ring-white/10"></div>
+                        </div>
+                    </nav>
+
+                    <main className="flex-1 p-3 sm:p-6 max-w-[1800px] w-full mx-auto">
+                        {apiStatus === 'error' && (
+                            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                                <div className="font-bold flex items-center gap-2 mb-1"><IconAlert /> API Connection Failed</div>
+                                Could not fetch data from the upstream API. Ensure the backend server is online and Vercel serverless functions are active.
+                            </div>
+                        )}
+
+                        {view === 'dashboard' ? (
+                            <div className="fade-in">
+                                <div className="flex flex-col xl:flex-row gap-4 justify-between mb-6">
+                                    <div className="relative w-full xl:w-96">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
+                                            <IconSearch />
+                                        </div>
+                                        <input 
+                                            type="text" 
+                                            className="block w-full pl-10 pr-3 py-2.5 bg-dark-900 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all text-sm" 
+                                            placeholder="Search contracts..."
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <div className="flex bg-dark-900 border border-white/10 rounded-lg p-1 overflow-x-auto hide-scrollbar">
+                                            {['All', 'Spot', 'Future', 'Unmapped'].map(f => (
+                                                <button 
+                                                    key={f}
+                                                    onClick={() => setFilter(f)}
+                                                    className={`px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${filter === f ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                                >
+                                                    {f}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex bg-dark-900 border border-white/10 rounded-lg p-1">
+                                            <button 
+                                                onClick={() => setViewMode('detailed')}
+                                                className={`flex-1 sm:flex-none flex justify-center items-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${viewMode === 'detailed' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                                title="Detailed View"
+                                            >
+                                                <IconList /> <span className="inline">Details</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => setViewMode('compact')}
+                                                className={`flex-1 sm:flex-none flex justify-center items-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${viewMode === 'compact' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                                title="Compact Grid View"
+                                            >
+                                                <IconGrid /> <span className="inline">Grid</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {filteredData.length === 0 ? (
+                                    <div className="text-center py-20 text-gray-500">No data received from API or matching filters.</div>
+                                ) : (
+                                    <>
+                                        {pinnedData.length > 0 && (
+                                            <div className="mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-white/10">
+                                                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                                                    {pinnedData.map(data => (
+                                                        <DashboardCard 
+                                                            key={data.channelId} 
+                                                            data={data} 
+                                                            mapping={mappings[data.channelId]}
+                                                            viewMode={viewMode}
+                                                            onClick={(d, m) => setSelectedData({ data: d, mapping: m })}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {regularData.length > 0 && (
+                                            <>
+                                                <div className="mb-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">All Instruments</div>
+                                                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                                                    {regularData.map(data => (
+                                                        <DashboardCard 
+                                                            key={data.channelId} 
+                                                            data={data} 
+                                                            mapping={mappings[data.channelId]}
+                                                            viewMode={viewMode}
+                                                            onClick={(d, m) => setSelectedData({ data: d, mapping: m })}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        ) : (
+                            <OwnerPanel mappings={mappings} onBack={() => setView('dashboard')} />
+                        )}
+                    </main>
+
+                    {selectedData && (
+                        <DetailDrawer 
+                            data={selectedData.data} 
+                            mapping={selectedData.mapping} 
+                            onClose={() => setSelectedData(null)} 
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
