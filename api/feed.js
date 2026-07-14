@@ -1,40 +1,29 @@
 export default async function handler(req, res) {
-    // Enable CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
 
     try {
-        console.log("Attempting to fetch upstream API...");
-        
-        // Add a timeout signal just in case the server is ignoring Vercel
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-
         const response = await fetch('http://172.105.34.37:4000/api/scrips/feed', {
-            signal: controller.signal,
+            method: 'GET',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0',
-                'Accept': 'application/json, text/plain, */*'
+                // These headers mimic a standard browser request
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Referer': 'http://172.105.34.37/', 
+                'Origin': 'http://172.105.34.37'
             }
         });
         
-        clearTimeout(timeoutId);
-        
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+            throw new Error(`Upstream API returned ${response.status}: ${errorText}`);
         }
         
         const data = await response.json();
         res.status(200).json(data);
         
     } catch (error) {
-        console.error("Vercel Detailed Error:", error.toString());
-        // This will print the EXACT technical error to your screen
-        res.status(500).json({ 
-            fatal_error: error.message,
-            name: error.name,
-            cause: error.cause ? error.cause.toString() : "Unknown"
-        });
+        console.error("Vercel Detailed Error:", error.message);
+        res.status(500).json({ error: error.message });
     }
 }
