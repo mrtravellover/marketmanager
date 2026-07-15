@@ -9,35 +9,176 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        body {
+            font-family: 'Segoe UI', ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background:
+                radial-gradient(1200px 600px at 10% -10%, rgba(56,189,248,0.06), transparent 60%),
+                radial-gradient(1200px 600px at 110% 10%, rgba(34,197,94,0.05), transparent 60%),
+                #050505;
+        }
+
         .market-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            padding: 1rem;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+            padding: 0.25rem;
         }
 
         @media (min-width: 768px) {
-            .market-grid { grid-template-columns: repeat(4, 1fr); }
+            .market-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
         }
 
         @media (min-width: 1024px) {
-            .market-grid { grid-template-columns: repeat(5, 1fr); }
+            .market-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.1rem; }
         }
 
         .market-card {
             aspect-ratio: 1 / 1;
             display: flex;
             flex-direction: column;
+            justify-content: space-between;
+            min-width: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .market-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 40%);
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        .ltp-flash-up { animation: flashUp 0.6s ease; }
+        .ltp-flash-down { animation: flashDown 0.6s ease; }
+
+        @keyframes flashUp {
+            0% { color: #ffffff; }
+            30% { color: #4ade80; }
+            100% { color: inherit; }
+        }
+        @keyframes flashDown {
+            0% { color: #ffffff; }
+            30% { color: #f87171; }
+            100% { color: inherit; }
+        }
+
+        .truncate-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     </style>
 </head>
-<body class="bg-[#050505] text-white">
+<body class="bg-[#050505] text-white min-h-screen">
     <div id="root"></div>
     <script type="text/babel" data-type="module">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
+
+        // Desired render order (NOT the API order). Each entry matches
+        // against a normalized haystack built from exchange + symbol + code,
+        // so slight naming differences from the provider don't break sorting.
+        const DISPLAY_ORDER = [
+            { label: 'Gold Spot',    match: s => s.includes('GOLD') && s.includes('SPOT') },
+            { label: 'Silver Spot',  match: s => s.includes('SILVER') && s.includes('SPOT') },
+            { label: 'USDINR',       match: s => s.includes('USDINR') || (s.includes('USD') && s.includes('INR')) },
+            { label: 'Gold MCX',     match: s => s.includes('GOLD') && s.includes('MCX') && !s.includes('MINI') },
+            { label: 'Silver MCX',   match: s => s.includes('SILVER') && s.includes('MCX') && !s.includes('MINI') },
+            { label: 'Crude Oil',    match: s => s.includes('CRUDE') },
+            { label: 'Copper',       match: s => s.includes('COPPER') },
+            { label: 'Aluminium',    match: s => s.includes('ALUMIN') },
+            { label: 'Zinc',         match: s => s.includes('ZINC') },
+            { label: 'Gold Mini',    match: s => s.includes('GOLD') && s.includes('MINI') },
+            { label: 'Silver Mini',  match: s => s.includes('SILVER') && s.includes('MINI') },
+            { label: 'Natural Gas',  match: s => s.includes('NATURAL') || s.includes('NATGAS') },
+        ];
+
+        const normalize = (item) =>
+            `${item.exchange || ''} ${item.symbol || ''} ${item.code || ''}`.toUpperCase();
+
+        const sortByDisplayOrder = (items) => {
+            const buckets = DISPLAY_ORDER.map(() => []);
+            const leftovers = [];
+
+            items.forEach(item => {
+                const hay = normalize(item);
+                const idx = DISPLAY_ORDER.findIndex(entry => entry.match(hay));
+                if (idx === -1) {
+                    leftovers.push(item);
+                } else {
+                    buckets[idx].push(item);
+                }
+            });
+
+            // If an expected symbol has no matching data, its bucket stays
+            // empty and it's simply skipped — the grid never breaks.
+            return [...buckets.flat(), ...leftovers];
+        };
+
+        const formatNumber = (n) => {
+            if (typeof n !== 'number' || Number.isNaN(n)) return '--';
+            return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        const MarketCard = ({ item }) => {
+            const prevLtp = useRef(item.ltp);
+            const [flash, setFlash] = useState(null);
+
+            useEffect(() => {
+                if (prevLtp.current !== undefined && item.ltp !== prevLtp.current) {
+                    setFlash(item.ltp > prevLtp.current ? 'up' : 'down');
+                    const t = setTimeout(() => setFlash(null), 600);
+                    prevLtp.current = item.ltp;
+                    return () => clearTimeout(t);
+                }
+                prevLtp.current = item.ltp;
+            }, [item.ltp]);
+
+            const isPositive = item.change >= 0;
+
+            return (
+                <div className="market-card bg-white/[0.04] backdrop-blur-sm p-2.5 sm:p-3 md:p-4 rounded-xl md:rounded-2xl border border-white/10 hover:border-white/20 hover:bg-white/[0.06] transition-all shadow-lg shadow-black/20">
+                    {/* Top row: name + expiry */}
+                    <div className="flex items-start justify-between gap-1">
+                        <span className="truncate-name text-[10px] sm:text-xs md:text-sm font-semibold text-gray-200 tracking-wide">
+                            {item.symbol}
+                        </span>
+                        <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-500 font-medium shrink-0">
+                            {item.expiry}
+                        </span>
+                    </div>
+
+                    {/* Center: LTP */}
+                    <div className="flex-1 flex items-center justify-center">
+                        <span className={`text-base sm:text-xl md:text-2xl lg:text-[1.7rem] font-bold tabular-nums leading-none ${flash === 'up' ? 'ltp-flash-up' : ''} ${flash === 'down' ? 'ltp-flash-down' : ''}`}>
+                            {formatNumber(item.ltp)}
+                        </span>
+                    </div>
+
+                    {/* Bottom: change + percent */}
+                    <div className={`flex items-center justify-between text-[10px] sm:text-xs md:text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                        <span className="flex items-center gap-0.5">
+                            <span className="text-[8px] sm:text-[10px]">{isPositive ? '▲' : '▼'}</span>
+                            {isPositive ? '+' : ''}{item.change}
+                        </span>
+                        <span>
+                            ({isPositive ? '+' : ''}{item.changePercent}%)
+                        </span>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [data, setData] = useState([]);
             const [status, setStatus] = useState('Connecting...');
+            const [lastUpdated, setLastUpdated] = useState(null);
 
             const fetchFeed = async () => {
                 try {
@@ -46,6 +187,7 @@
                     if (!json.success) throw new Error(json.error);
                     setData(json.data);
                     setStatus('Live');
+                    setLastUpdated(new Date());
                 } catch (err) {
                     setStatus('Feed Offline');
                 }
@@ -57,24 +199,33 @@
                 return () => clearInterval(interval);
             }, []);
 
+            const orderedData = sortByDisplayOrder(data);
+
             return (
-                <div className="p-4 md:p-6">
-                    <div className="flex items-center gap-2 mb-6">
-                        <div className={`w-3 h-3 rounded-full ${status === 'Live' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
-                        <span className="font-bold">{status}</span>
+                <div className="p-3 sm:p-4 md:p-6 max-w-[1400px] mx-auto">
+                    <div className="flex items-center justify-between mb-4 md:mb-6 flex-wrap gap-2">
+                        <div>
+                            <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+                                Live Market
+                            </h1>
+                            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                                Real-time commodity &amp; currency feed
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
+                            <div className={`w-2 h-2 rounded-full ${status === 'Live' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+                            <span className="text-xs sm:text-sm font-semibold">{status}</span>
+                            {lastUpdated && (
+                                <span className="text-[10px] text-gray-500 hidden sm:inline">
+                                    {lastUpdated.toLocaleTimeString()}
+                                </span>
+                            )}
+                        </div>
                     </div>
+
                     <div className="market-grid">
-                        {data.map(item => (
-                            <div key={item.code} className="market-card bg-white/5 p-4 rounded-xl border border-white/10 hover:border-white/20 transition-all">
-                                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                                    <span>{item.symbol}</span>
-                                    <span>{item.expiry}</span>
-                                </div>
-                                <div className="text-2xl font-bold">{item.ltp.toLocaleString()}</div>
-                                <div className={`text-sm ${item.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {item.change > 0 ? '+' : ''}{item.change} ({item.changePercent}%)
-                                </div>
-                            </div>
+                        {orderedData.map(item => (
+                            <MarketCard key={item.code || item.symbol} item={item} />
                         ))}
                     </div>
                 </div>
