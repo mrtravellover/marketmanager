@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Contract Manager</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #050505; color: white; }
+        .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect } = React;
+        const App = () => {
+            const [marketData, setMarketData] = useState([]);
+            const [status, setStatus] = useState('Loading...');
+
+            const fetchData = async () => {
+                try {
+                    const res = await fetch('/api/feed');
+                    if (!res.ok) throw new Error('Offline');
+                    const data = await res.json();
+                    setMarketData(data);
+                    setStatus('Live');
+                } catch (e) {
+                    setStatus('Feed Offline');
+                }
+            };
+
+            useEffect(() => {
+                fetchData();
+                const int = setInterval(fetchData, 2000);
+                return () => clearInterval(int);
+            }, []);
+
+            return (
+                <div className="p-4">
+                    <div className="flex justify-between mb-4">
+                        <h1 className="text-xl font-bold">Market Manager</h1>
+                        <span className={`px-2 py-1 rounded text-xs ${status === 'Live' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>{status}</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {marketData.map(c => (
+                            <div key={c.id} className="glass p-3 rounded-lg">
+                                <div className="text-xs text-gray-400">{c.symbol} {c.expiry}</div>
+                                <div className="text-xl font-bold">{c.ltp.toLocaleString()}</div>
+                                <div className={`text-sm ${c.change >= 0 ? 'text-green-500' : 'text-red-500'}`}>{c.change} ({c.changePercent}%)</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
