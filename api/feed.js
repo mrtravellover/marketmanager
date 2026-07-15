@@ -4,7 +4,6 @@ export default async function handler(req, res) {
 
     const MAX_RETRIES = 3;
 
-    // Helper to perform fetch with retry
     async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
         for (let i = 0; i < retries; i++) {
             try {
@@ -12,8 +11,7 @@ export default async function handler(req, res) {
                 if (response.ok) return await response.json();
                 throw new Error(`Provider returned ${response.status}`);
             } catch (err) {
-                if (i === retries - 1) throw err; // Throw on last attempt
-                // Wait 500ms before retrying
+                if (i === retries - 1) throw err;
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
@@ -30,31 +28,32 @@ export default async function handler(req, res) {
             signal: AbortSignal.timeout(5000)
         });
 
-        // DEBUG: Uncomment the line below to inspect the structure if data is still missing
-        // console.log("API Response Sample:", JSON.stringify(json.data?.[0], null, 2));
-
-        const cleanedData = (json.data || []).map(item => ({
-            id: `${(item.Symbol || 'N/A').trim()}-${(item['Ser/Exp'] || 'N/A').trim()}`,
-            symbol: (item.Symbol || '').trim(),
-            expiry: (item['Ser/Exp'] || '').trim(),
-            code: (item.Code || '').trim(),
-            // Using logical OR to ensure we get a number even if the key is missing/null
-            ltp: parseFloat(item.LTP || 0),
-            buy: parseFloat(item.BUY || 0),
-            sell: parseFloat(item.SELL || 0),
-            high: parseFloat(item.High || 0),
-            low: parseFloat(item.Low || 0),
-            open: parseFloat(item.Open || 0),
-            change: parseFloat(item.Change || 0),
-            changePercent: parseFloat(item['% Change'] || 0),
-            volume: parseInt(item.Vol || 0),
-            oi: parseInt(item.OI || 0),
+        const data = (json.data || []).map(item => ({
+            exchange: item.Exchange || '',
+            symbol: item.Symbol || '',
+            expiry: item['Ser/Exp'] || '',
+            code: (item.Code || '').replace(/\r?\n|\r/g, ''),
+            ltp: parseFloat(item.LTP) || 0,
+            buy: parseFloat(item.BUY) || 0,
+            sell: parseFloat(item.SELL) || 0,
+            high: parseFloat(item.High) || 0,
+            low: parseFloat(item.Low) || 0,
+            open: parseFloat(item.Open) || 0,
+            close: parseFloat(item.Close) || 0,
+            change: parseFloat(item.Change) || 0,
+            changePercent: parseFloat(item['% Change']) || 0,
+            tbq: parseInt(item.TBQ) || 0,
+            tsq: parseInt(item.TSQ) || 0,
+            oi: parseInt(item.OI) || 0,
+            volume: parseInt(item.Vol) || 0,
+            atp: parseFloat(item.ATP) || 0,
+            dpr: item.DPR || '',
             updateTime: item['Last Update Time'] || ''
         }));
 
-        res.status(200).json(cleanedData);
+        res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Feed Fetch Error:", error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ success: false, error: error.message });
     }
 }
