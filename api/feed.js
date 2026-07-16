@@ -12,9 +12,9 @@ export default async function handler(req, res) {
     // IMPORTANT: retries * timeout must stay comfortably under your serverless function's
     // execution cap, or Vercel kills the function mid-retry and the frontend sees a hard
     // failure regardless of how much retry logic you write. Hobby plan = 10s hard cap.
-    // Worst case here: 2 attempts * 4s timeout + 1 backoff of 600ms ≈ 8.6s — safe under 10s.
-    const MAX_RETRIES = 2;
-    const TIMEOUT_MS = 4000;
+    // Worst case (all real timeouts, not fast socket-closed retries): 3 * 3s + 2 * 300ms ≈ 9.6s.
+    const MAX_RETRIES = 3;
+    const TIMEOUT_MS = 3000;
 
     async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
         let lastError;
@@ -29,9 +29,13 @@ export default async function handler(req, res) {
                 return json;
             } catch (err) {
                 lastError = err;
-                console.error(`Feed attempt ${i + 1}/${retries} failed:`, err.name, err.message, err.cause || '');
+                const socketClosed = err.cause?.code === 'UND_ERR_SOCKET';
+                console.error(`Feed attempt ${i + 1}/${retries} failed:`, err.name, err.message, err.cause?.code || '');
                 if (i < retries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 300 * (i + 1))); // backoff
+                    // Provider closes pooled/keep-alive sockets from its side (UND_ERR_SOCKET,
+                    // "other side closed", 0 bytes read) — that's a dead connection, not real
+                    // network congestion, so retry it almost immediately rather than backing off.
+                    await new Promise(resolve => setTimeout(resolve, socketClosed ? 100 : 300 * (i + 1)));
                 }
             }
         }
@@ -44,7 +48,12 @@ export default async function handler(req, res) {
             headers: {
                 'Accept': 'application/json',
                 'User-Agent': 'Mozilla/5.0',
-                'x-application': '64bt9cG6g0dZ2A4j985lmt1Bb6'
+                'x-application': '64bt9cG6g0dZ2A4j985lmt1Bb6',
+                // Forces a fresh TCP connection per request instead of letting Node's fetch
+                // (undici) pool/reuse a keep-alive socket. The provider appears to close
+                // idle/pooled connections from its side, which surfaces as
+                // "UND_ERR_SOCKET: other side closed" when undici tries to reuse one.
+                'Connection': 'close'
             },
             signal: AbortSignal.timeout(TIMEOUT_MS)
         });
