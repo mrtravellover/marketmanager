@@ -94,6 +94,14 @@ function parseExpiryDate(expiry) {
   return null;
 }
 
+// Groups where a specific expiry pattern should always be featured, rather than
+// just "earliest expiry". Currently: prefer the contract expiring on day 1-10
+// of its month — this keeps working automatically as contracts roll forward
+// month to month, without needing to hardcode a date.
+const PRIORITY_DAY_GROUPS = ["Gold", "Silver"];
+const PRIORITY_DAY_MIN = 1;
+const PRIORITY_DAY_MAX = 10;
+
 function organize(data) {
   const spot = [];
   const byGroup = {};
@@ -117,6 +125,21 @@ function organize(data) {
       if (da && db) return da - db;
       return 0;
     });
+
+    // For priority groups, move whichever contract expires on day 1-10 of its
+    // month to the front, so it becomes "near" and gets featured — even if a
+    // different contract expires chronologically sooner (e.g. day 31).
+    if (PRIORITY_DAY_GROUPS.includes(name)) {
+      const list = byGroup[name];
+      const priorityIndex = list.findIndex(c => {
+        const d = parseExpiryDate(c.expiry);
+        return d && d.getDate() >= PRIORITY_DAY_MIN && d.getDate() <= PRIORITY_DAY_MAX;
+      });
+      if (priorityIndex > 0) {
+        const [priorityContract] = list.splice(priorityIndex, 1);
+        list.unshift(priorityContract);
+      }
+    }
   });
 
   spot.sort((a, b) => SPOT_ORDER.indexOf(a.displayName) - SPOT_ORDER.indexOf(b.displayName));
@@ -421,5 +444,4 @@ const App = () => {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
-</body>
-</html>
+</body
