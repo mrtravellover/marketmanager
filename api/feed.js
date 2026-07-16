@@ -16,9 +16,16 @@ export default async function handler(req, res) {
     const MAX_RETRIES = 3;
     const TIMEOUT_MS = 3000;
 
-    async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
+    async function fetchWithRetry(url, baseOptions, retries = MAX_RETRIES) {
         let lastError;
         for (let i = 0; i < retries; i++) {
+            // Keep-alive on the first attempt (fast — reuses a warm connection when available).
+            // Only force a fresh connection on a retry that follows a socket-closed error,
+            // since that's specifically when a stale pooled socket is the problem.
+            const forceFreshConnection = lastError?.cause?.code === 'UND_ERR_SOCKET';
+            const options = forceFreshConnection
+                ? { ...baseOptions, headers: { ...baseOptions.headers, 'Connection': 'close' } }
+                : baseOptions;
             try {
                 const response = await fetch(url, options);
                 if (!response.ok) throw new Error(`Provider returned HTTP ${response.status}`);
@@ -32,9 +39,7 @@ export default async function handler(req, res) {
                 const socketClosed = err.cause?.code === 'UND_ERR_SOCKET';
                 console.error(`Feed attempt ${i + 1}/${retries} failed:`, err.name, err.message, err.cause?.code || '');
                 if (i < retries - 1) {
-                    // Provider closes pooled/keep-alive sockets from its side (UND_ERR_SOCKET,
-                    // "other side closed", 0 bytes read) — that's a dead connection, not real
-                    // network congestion, so retry it almost immediately rather than backing off.
+                    // Dead pooled socket, not real congestion — retry almost immediately.
                     await new Promise(resolve => setTimeout(resolve, socketClosed ? 100 : 300 * (i + 1)));
                 }
             }
@@ -48,12 +53,7 @@ export default async function handler(req, res) {
             headers: {
                 'Accept': 'application/json',
                 'User-Agent': 'Mozilla/5.0',
-                'x-application': '64bt9cG6g0dZ2A4j985lmt1Bb6',
-                // Forces a fresh TCP connection per request instead of letting Node's fetch
-                // (undici) pool/reuse a keep-alive socket. The provider appears to close
-                // idle/pooled connections from its side, which surfaces as
-                // "UND_ERR_SOCKET: other side closed" when undici tries to reuse one.
-                'Connection': 'close'
+                'x-application': '64bt9cG6g0dZ2A4j985lmt1Bb6'
             },
             signal: AbortSignal.timeout(TIMEOUT_MS)
         });
